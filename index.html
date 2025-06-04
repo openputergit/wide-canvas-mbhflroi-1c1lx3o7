@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Analytics Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <nav class="bg-blue-600 text-white p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">Excel Analytics Platform</h1>
+            <div id="userInfo" class="hidden">
+                <span id="username" class="mr-4"></span>
+                <button onclick="logout()" class="bg-red-500 px-4 py-2 rounded hover:bg-black-600">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-4">
+        <!-- Auth Section -->
+        <div id="authSection" class="max-w-md mx-auto bg-white p-8 rounded-lg shadow-lg">
+            <h2 class="text-2xl font-bold mb-6">Login/Register</h2>
+            <div class="space-y-4">
+                <input type="email" id="email" placeholder="Email" class="w-full p-2 border rounded">
+                <input type="password" id="password" placeholder="Password" class="w-full p-2 border rounded">
+                <button onclick="handleAuth()" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
+                    Submit
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="dashboard" class="hidden">
+            <div class="bg-white p-6 rounded-lg shadow-lg mb-6">
+                <h2 class="text-xl font-bold mb-4">Upload Excel File</h2>
+                <input type="file" id="excelFile" accept=".xls,.xlsx" class="mb-4">
+                <div id="columnSelector" class="hidden space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block mb-2">X-Axis</label>
+                            <select id="xAxis" class="w-full p-2 border rounded"></select>
+                        </div>
+                        <div>
+                            <label class="block mb-2">Y-Axis</label>
+                            <select id="yAxis" class="w-full p-2 border rounded"></select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block mb-2">Chart Type</label>
+                        <select id="chartType" class="w-full p-2 border rounded">
+                            <option value="bar">Bar Chart</option>
+                            <option value="line">Line Chart</option>
+                            <option value="pie">Pie Chart</option>
+                            <option value="scatter">Scatter Plot</option>
+                        </select>
+                    </div>
+                    <button onclick="generateChart()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                        Generate Chart
+                    </button>
+                </div>
+            </div>
+
+            <div id="chartArea" class="hidden bg-white p-6 rounded-lg shadow-lg mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Chart Visualization</h2>
+                    <button onclick="downloadChart()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        Download Chart
+                    </button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="myChart"></canvas>
+                </div>
+            </div>
+
+            <div id="aiInsights" class="hidden bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-xl font-bold mb-4">AI Insights</h2>
+                <div id="insightsContent" class="prose"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentChart = null;
+        let userData = null;
+
+        // MongoDB App Slug
+        const APP_SLUG = 'excel-analytics-123456';
+
+        async function handleAuth() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            // For demo purposes, simple authentication
+            userData = { email, id: Date.now().toString() };
+            document.getElementById('username').textContent = email;
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('userInfo').classList.remove('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+        }
+
+        function logout() {
+            userData = null;
+            document.getElementById('authSection').classList.remove('hidden');
+            document.getElementById('userInfo').classList.add('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+        }
+
+        document.getElementById('excelFile').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                if(jsonData.length > 0) {
+                    const columns = Object.keys(jsonData[0]);
+                    const xSelect = document.getElementById('xAxis');
+                    const ySelect = document.getElementById('yAxis');
+
+                    xSelect.innerHTML = '';
+                    ySelect.innerHTML = '';
+
+                    columns.forEach(column => {
+                        xSelect.add(new Option(column, column));
+                        ySelect.add(new Option(column, column));
+                    });
+
+                    document.getElementById('columnSelector').classList.remove('hidden');
+                    
+                    // Store data for later use
+                    window.excelData = jsonData;
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        });
+
+        async function generateChart() {
+            if(!window.excelData) return;
+
+            const xAxis = document.getElementById('xAxis').value;
+            const yAxis = document.getElementById('yAxis').value;
+            const chartType = document.getElementById('chartType').value;
+
+            const data = {
+                labels: window.excelData.map(row => row[xAxis]),
+                datasets: [{
+                    label: yAxis,
+                    data: window.excelData.map(row => row[yAxis]),
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            };
+
+            const config = {
+                type: chartType,
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            };
+
+            const chartArea = document.getElementById('chartArea');
+            chartArea.classList.remove('hidden');
+
+            if(currentChart) {
+                currentChart.destroy();
+            }
+
+            currentChart = new Chart(
+                document.getElementById('myChart'),
+                config
+            );
+
+            // Generate AI insights
+            generateAIInsights(window.excelData, xAxis, yAxis);
+        }
+
+        async function generateAIInsights(data, xAxis, yAxis) {
+            const prompt = `Analyze this Excel data with columns ${xAxis} and ${yAxis}. Provide key insights and trends.`;
+            
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/ai', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer 4YiSqujbqwgK3vv8ohoEx5AmGOG2',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        messages: [{
+                            role: "user",
+                            content: [{
+                                type: "text",
+                                text: prompt + "\n" + JSON.stringify(data)
+                            }]
+                        }]
+                    })
+                });
+
+                const result = await response.json();
+                
+                document.getElementById('aiInsights').classList.remove('hidden');
+                document.getElementById('insightsContent').innerHTML = `
+                    <div class="bg-blue-50 p-4 rounded">
+                        <p class="text-gray-700">${result.message}</p>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error generating AI insights:', error);
+            }
+        }
+
+        function downloadChart() {
+            if(!currentChart) return;
+            
+            const link = document.createElement('a');
+            link.download = 'chart.png';
+            link.href = currentChart.canvas.toDataURL('image/png');
+            link.click();
+        }
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
